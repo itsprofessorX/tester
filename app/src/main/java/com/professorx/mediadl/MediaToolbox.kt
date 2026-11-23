@@ -28,31 +28,23 @@ object MediaToolbox {
     }
 
     private fun findFfmpegBinary(ctx: Context): File? {
+        // On Android 10+ (SELinux), nativeLibraryDir is always executable
+        val nativeLib = File(ctx.applicationInfo.nativeLibraryDir, "libffmpeg.so")
+        if (nativeLib.exists() && nativeLib.isFile) {
+            return nativeLib
+        }
         val searchRoots = listOfNotNull(
             File(ctx.noBackupFilesDir, "youtubedl-android"),
             File(ctx.filesDir, "youtubedl-android"),
             ctx.noBackupFilesDir,
-            ctx.filesDir,
-            File(ctx.applicationInfo.nativeLibraryDir)
+            ctx.filesDir
         )
         for (root in searchRoots) {
             if (!root.exists()) continue
-            val direct = listOf(
-                File(root, "packages/ffmpeg/usr/bin/ffmpeg"),
-                File(root, "ffmpeg"),
-                File(root, "libffmpeg.so")
-            ).firstOrNull { it.exists() && it.isFile }
-            if (direct != null) {
-                runCatching { direct.setExecutable(true, false) }
-                return direct
-            }
             val found = root.walkTopDown().maxDepth(6).firstOrNull {
-                it.isFile && (it.name == "ffmpeg" || it.name == "libffmpeg.so")
+                it.isFile && (it.name == "ffmpeg" || it.name == "libffmpeg.so") && it.canExecute()
             }
-            if (found != null) {
-                runCatching { found.setExecutable(true, false) }
-                return found
-            }
+            if (found != null) return found
         }
         return null
     }

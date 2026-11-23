@@ -86,7 +86,6 @@ fun HomeScreen(
         if (clean != null) vm.history.firstOrNull { it.sourceUrl == clean } else null
     }
     var deleteCandidate by remember { mutableStateOf<SavedMedia?>(null) }
-    var playerStartIndex by remember { mutableStateOf<Int?>(null) }
 
     BackHandler(enabled = vm.currentPreview != null) {
         vm.clearPreview()
@@ -182,7 +181,7 @@ fun HomeScreen(
             } else {
                 val recent = vm.history.take(6)
                 itemsIndexed(recent, key = { _, item -> item.id }) { idx, item ->
-                    MinimalRowItem(onClick = { playerStartIndex = idx }) {
+                    MinimalRowItem(onClick = { openSavedMedia(ctx, item) }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             MediaThumbnail(
                                 uri = item.uri,
@@ -278,10 +277,7 @@ fun HomeScreen(
                         .padding(bottom = 8.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(colors.surfaceElevated)
-                        .elasticClickable {
-                            val idx = vm.history.indexOfFirst { it.id == duplicateMatch.id }
-                            if (idx >= 0) playerStartIndex = idx
-                        }
+                        .elasticClickable { openSavedMedia(ctx, duplicateMatch) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -405,14 +401,6 @@ fun HomeScreen(
                 )
             }
         }
-    }
-
-    playerStartIndex?.let { idx ->
-        InbuiltMediaPlayerDialog(
-            items = vm.history.take(6),
-            initialIndex = idx,
-            onDismiss = { playerStartIndex = null }
-        )
     }
 
     deleteCandidate?.let { item ->

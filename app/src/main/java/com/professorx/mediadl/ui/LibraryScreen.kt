@@ -77,7 +77,6 @@ fun LibraryScreen(vm: DlViewModel) {
     var isGrid by remember { mutableStateOf(true) }
     var deleteCandidate by remember { mutableStateOf<SavedMedia?>(null) }
     var toolboxCandidate by remember { mutableStateOf<SavedMedia?>(null) }
-    var playingIndex by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(Unit) { vm.verifyGalleryFiles() }
 
@@ -209,7 +208,7 @@ fun LibraryScreen(vm: DlViewModel) {
                             .clip(RoundedCornerShape(16.dp))
                             .background(colors.surface)
                             .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-                            .elasticClickable { playingIndex = idx }
+                            .elasticClickable { openSavedMedia(ctx, item) }
                             .padding(10.dp)
                     ) {
                         Box {
@@ -259,7 +258,7 @@ fun LibraryScreen(vm: DlViewModel) {
                 contentPadding = PaddingValues(bottom = 20.dp)
             ) {
                 itemsIndexed(filtered, key = { _, item -> item.id }) { idx, item ->
-                    MinimalRowItem(onClick = { playingIndex = idx }) {
+                    MinimalRowItem(onClick = { openSavedMedia(ctx, item) }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             MediaThumbnail(
                                 uri = item.uri,
@@ -300,10 +299,6 @@ fun LibraryScreen(vm: DlViewModel) {
                 }
             }
         }
-    }
-
-    playingIndex?.let { idx ->
-        InbuiltMediaPlayerDialog(items = filtered, initialIndex = idx, onDismiss = { playingIndex = null })
     }
 
     deleteCandidate?.let { item ->

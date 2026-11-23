@@ -61,7 +61,7 @@ object LinkPreviewer {
                             durationSeconds = null,
                             caption = ig.caption,
                             slides = ig.slides,
-                            requiresLoginHint = (!hasCookies && ig.slides.size <= 1 && !ig.slides.firstOrNull()?.isVideo.let { it == true } && Instagram.extractProfileUsername(url) == null),
+                            requiresLoginHint = false,
                             options = defaultOptions(isPhotoOnly = !hasVideo)
                         )
                     }
