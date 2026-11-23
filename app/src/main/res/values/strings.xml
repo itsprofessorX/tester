@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">MediaDown</string>
+    <string name="widget_name">MediaDown Quick Status</string>
+    <string name="widget_description">Shows download activity and quick access to MediaDown.</string>
+</resources>
