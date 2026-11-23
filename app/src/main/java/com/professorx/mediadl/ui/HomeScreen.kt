@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,6 +76,7 @@ fun HomeScreen(
     onOpenInstagramLogin: () -> Unit,
     onOpenNotifications: () -> Unit
 ) {
+    val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val haptic = LocalHapticFeedback.current
     val colors = LocalMediaColors.current
@@ -206,7 +208,7 @@ fun HomeScreen(
                                     maxLines = 1
                                 )
                             }
-                            IconButton(onClick = { shareSavedMedia(androidx.compose.ui.platform.LocalContext.current, item) }) {
+                            IconButton(onClick = { shareSavedMedia(ctx, item) }) {
                                 Icon(Icons.Rounded.Share, contentDescription = "Share", tint = colors.textMuted, modifier = Modifier.size(18.dp))
                             }
                             IconButton(onClick = { deleteCandidate = item }) {
