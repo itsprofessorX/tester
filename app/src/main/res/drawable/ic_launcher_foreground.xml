@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Rounded coral-red play triangle centered in the adaptive icon safe zone -->
+    <path
+        android:fillColor="#FFFF4444"
+        android:pathData="M34,35 C34,30 39.5,27 44,29.6 L76,48.6 C80.5,51.2 80.5,57.8 76,60.4 L44,79.4 C39.5,82 34,79 34,74 Z" />
+    <!-- Black downward arrow cut out from top edge of the triangle -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M48.5,31 L54.5,31 L54.5,54 L61.5,47 L65.5,51 L51.5,65 L37.5,51 L41.5,47 L48.5,54 Z" />
+</vector>
