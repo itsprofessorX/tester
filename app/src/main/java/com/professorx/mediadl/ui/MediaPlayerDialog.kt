@@ -252,6 +252,7 @@ private fun ReelMediaPage(
                         AndroidView(
                             factory = { context ->
                                 TextureView(context).apply {
+                                    val tv = this
                                     surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                                         override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
                                             runCatching {
@@ -260,11 +261,11 @@ private fun ReelMediaPage(
                                                     setSurface(Surface(st))
                                                     isLooping = true
                                                     setOnVideoSizeChangedListener { _, vw, vh ->
-                                                        applyFitCenterTransform(this@apply, width, height, vw, vh)
+                                                        applyFitCenterTransform(tv, width, height, vw, vh)
                                                     }
                                                     setOnPreparedListener { prepared ->
                                                         durationMs = prepared.duration.coerceAtLeast(0)
-                                                        applyFitCenterTransform(this@apply, width, height, prepared.videoWidth, prepared.videoHeight)
+                                                        applyFitCenterTransform(tv, width, height, prepared.videoWidth, prepared.videoHeight)
                                                         if (isActivePage) {
                                                             prepared.start()
                                                             isPlaying = true
@@ -284,7 +285,7 @@ private fun ReelMediaPage(
 
                                         override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) {
                                             mediaPlayerRef?.let { mp ->
-                                                runCatching { applyFitCenterTransform(this@apply, width, height, mp.videoWidth, mp.videoHeight) }
+                                                runCatching { applyFitCenterTransform(tv, width, height, mp.videoWidth, mp.videoHeight) }
                                             }
                                         }
 
