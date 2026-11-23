@@ -411,11 +411,13 @@ fun SettingsScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Engine: ${vm.engineVersion} (${vm.engine})", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Text("• 4-tab AMOLED black redesign (Home, Downloads, Library, Settings)", color = colors.textPrimary, fontSize = 12.sp)
-                        Text("• Smart Link Preview & Quality Selector (144p–4K, MP4, WebM, MP3, M4A)", color = colors.textPrimary, fontSize = 12.sp)
-                        Text("• Multi-download queue with Pause, Resume, Retry, Delete, Speed & ETA", color = colors.textPrimary, fontSize = 12.sp)
-                        Text("• Media Library with Grid/List, Favorites, Missing-file check & Toolbox", color = colors.textPrimary, fontSize = 12.sp)
-                        Text("• Single-task Instagram Share fix (no duplicate recent tasks)", color = colors.textPrimary, fontSize = 12.sp)
+                        Text("• Floating Pill Bottom Bar & Cardless AMOLED Ultra-Minimal UI", color = colors.textPrimary, fontSize = 12.sp)
+                        Text("• Compact One-Handed Home with Paste, Clear & Duplicate Link Detection", color = colors.textPrimary, fontSize = 12.sp)
+                        Text("• Smart Link Preview, Quality Selector (144p–4K), Carousel Slide Picker & Copy Caption", color = colors.textPrimary, fontSize = 12.sp)
+                        Text("• Multi-Download Queue with Pause, Resume, Cancel, Retry, Delete, Speed & ETA", color = colors.textPrimary, fontSize = 12.sp)
+                        Text("• Media Library with Grid/List, Search, Favorites, Toolbox & Reels-Style Swipe Player (1x/1.5x/2x)", color = colors.textPrimary, fontSize = 12.sp)
+                        Text("• Predictive Back Gesture support (Android 13–17), Privacy Center & Personalization", color = colors.textPrimary, fontSize = 12.sp)
+                        Text("• Single-Task Instagram Share fix (no duplicate recent tasks)", color = colors.textPrimary, fontSize = 12.sp)
                         Spacer(Modifier.height(4.dp))
                         Button(
                             onClick = { vm.forceUpdate() },

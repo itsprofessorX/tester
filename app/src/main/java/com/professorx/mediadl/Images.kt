@@ -194,11 +194,13 @@ object Images {
             val c = URL(src).openConnection() as HttpURLConnection
             c.connectTimeout = 15000; c.readTimeout = 25000
             c.setRequestProperty("User-Agent", UA_WEB)
+            c.setRequestProperty("Referer", "https://www.instagram.com/")
             if (c.responseCode !in 200..299) return null
             val type = c.contentType.orEmpty().lowercase()
-            if (!type.startsWith("image") && !type.startsWith("video")) return null
+            val isOctet = type.isBlank() || "octet-stream" in type
+            if (!type.startsWith("image") && !type.startsWith("video") && !isOctet) return null
             val ext = when {
-                "video" in type -> "mp4"
+                "video" in type || ".mp4" in src.lowercase() -> "mp4"
                 "png" in type -> "png"
                 "webp" in type -> "webp"
                 "gif" in type -> "gif"

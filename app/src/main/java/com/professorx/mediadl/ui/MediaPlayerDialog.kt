@@ -2,9 +2,12 @@ package com.professorx.mediadl.ui
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.graphics.SurfaceTexture
 import android.media.MediaPlayer
 import android.os.Build
-import android.widget.VideoView
+import android.view.Surface
+import android.view.TextureView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -92,6 +95,7 @@ fun InbuiltMediaPlayerDialog(
         ) {
             VerticalPager(
                 state = pagerState,
+                beyondViewportPageCount = 0,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 val isCurrent = pagerState.currentPage == page
@@ -185,38 +189,50 @@ private fun ReelMediaPage(
 
         when {
             isVideo -> {
-                var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
-                var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
-                var isPlaying by remember { mutableStateOf(false) }
-                var durationMs by remember { mutableIntStateOf(0) }
-                var positionMs by remember { mutableIntStateOf(0) }
+                var mediaPlayerRef by remember(item.uriString) { mutableStateOf<MediaPlayer?>(null) }
+                var isPlaying by remember(item.uriString) { mutableStateOf(false) }
+                var durationMs by remember(item.uriString) { mutableIntStateOf(0) }
+                var positionMs by remember(item.uriString) { mutableIntStateOf(0) }
+                var loadError by remember(item.uriString) { mutableStateOf<String?>(null) }
 
-                LaunchedEffect(isActivePage, videoViewRef) {
-                    val vv = videoViewRef ?: return@LaunchedEffect
-                    if (isActivePage) {
-                        vv.start()
-                        isPlaying = true
-                    } else if (vv.isPlaying) {
-                        vv.pause()
-                        isPlaying = false
+                DisposableEffect(item.uriString) {
+                    onDispose {
+                        runCatching {
+                            mediaPlayerRef?.stop()
+                            mediaPlayerRef?.release()
+                        }
+                        mediaPlayerRef = null
+                    }
+                }
+
+                LaunchedEffect(isActivePage, mediaPlayerRef) {
+                    val mp = mediaPlayerRef ?: return@LaunchedEffect
+                    runCatching {
+                        if (isActivePage) {
+                            if (!mp.isPlaying) mp.start()
+                            isPlaying = true
+                        } else if (mp.isPlaying) {
+                            mp.pause()
+                            isPlaying = false
+                        }
                     }
                 }
 
                 LaunchedEffect(playbackSpeed, mediaPlayerRef) {
                     val mp = mediaPlayerRef ?: return@LaunchedEffect
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        runCatching {
-                            mp.playbackParams = mp.playbackParams.setSpeed(playbackSpeed)
-                        }
+                        runCatching { mp.playbackParams = mp.playbackParams.setSpeed(playbackSpeed) }
                     }
                 }
 
-                LaunchedEffect(isPlaying, videoViewRef, isActivePage) {
+                LaunchedEffect(isPlaying, mediaPlayerRef, isActivePage) {
                     while (isActivePage) {
-                        val vv = videoViewRef
-                        if (vv != null && vv.isPlaying) {
-                            positionMs = vv.currentPosition
-                            if (durationMs <= 0 && vv.duration > 0) durationMs = vv.duration
+                        runCatching {
+                            val mp = mediaPlayerRef
+                            if (mp != null && mp.isPlaying) {
+                                positionMs = mp.currentPosition
+                                if (durationMs <= 0 && mp.duration > 0) durationMs = mp.duration
+                            }
                         }
                         delay(250)
                     }
@@ -230,25 +246,64 @@ private fun ReelMediaPage(
                         .background(Color(0xFF0A0A0A)),
                     contentAlignment = Alignment.Center
                 ) {
-                    AndroidView(
-                        factory = { context ->
-                            VideoView(context).apply {
-                                setVideoURI(item.uri)
-                                setOnPreparedListener { mp ->
-                                    mediaPlayerRef = mp
-                                    mp.isLooping = true
-                                    durationMs = mp.duration.coerceAtLeast(0)
-                                    if (isActivePage) {
-                                        start()
-                                        isPlaying = true
+                    if (loadError != null) {
+                        Text(loadError!!, color = colors.textMuted, fontSize = 13.sp)
+                    } else {
+                        AndroidView(
+                            factory = { context ->
+                                TextureView(context).apply {
+                                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                                        override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
+                                            runCatching {
+                                                val mp = MediaPlayer().apply {
+                                                    setDataSource(context, item.uri)
+                                                    setSurface(Surface(st))
+                                                    isLooping = true
+                                                    setOnVideoSizeChangedListener { _, vw, vh ->
+                                                        applyFitCenterTransform(this@apply, width, height, vw, vh)
+                                                    }
+                                                    setOnPreparedListener { prepared ->
+                                                        durationMs = prepared.duration.coerceAtLeast(0)
+                                                        applyFitCenterTransform(this@apply, width, height, prepared.videoWidth, prepared.videoHeight)
+                                                        if (isActivePage) {
+                                                            prepared.start()
+                                                            isPlaying = true
+                                                        }
+                                                    }
+                                                    setOnErrorListener { _, _, _ ->
+                                                        loadError = "Unable to play this video."
+                                                        true
+                                                    }
+                                                    prepareAsync()
+                                                }
+                                                mediaPlayerRef = mp
+                                            }.onFailure {
+                                                loadError = "Unable to open video file."
+                                            }
+                                        }
+
+                                        override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) {
+                                            mediaPlayerRef?.let { mp ->
+                                                runCatching { applyFitCenterTransform(this@apply, width, height, mp.videoWidth, mp.videoHeight) }
+                                            }
+                                        }
+
+                                        override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                                            runCatching {
+                                                mediaPlayerRef?.stop()
+                                                mediaPlayerRef?.release()
+                                            }
+                                            mediaPlayerRef = null
+                                            return true
+                                        }
+
+                                        override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
                                     }
                                 }
-                                setOnCompletionListener { isPlaying = false }
-                                videoViewRef = this
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -259,16 +314,18 @@ private fun ReelMediaPage(
                     accent = colors.accent,
                     onSeek = { target ->
                         positionMs = target
-                        videoViewRef?.seekTo(target)
+                        runCatching { mediaPlayerRef?.seekTo(target) }
                     },
                     onTogglePlay = {
-                        val vv = videoViewRef ?: return@PlayerControlsBar
-                        if (vv.isPlaying) {
-                            vv.pause()
-                            isPlaying = false
-                        } else {
-                            vv.start()
-                            isPlaying = true
+                        val mp = mediaPlayerRef ?: return@PlayerControlsBar
+                        runCatching {
+                            if (mp.isPlaying) {
+                                mp.pause()
+                                isPlaying = false
+                            } else {
+                                mp.start()
+                                isPlaying = true
+                            }
                         }
                     }
                 )
@@ -383,6 +440,25 @@ private fun ReelMediaPage(
             }
         }
     }
+}
+
+private fun applyFitCenterTransform(view: TextureView, viewWidth: Int, viewHeight: Int, videoWidth: Int, videoHeight: Int) {
+    if (viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return
+    val viewAspect = viewWidth.toFloat() / viewHeight.toFloat()
+    val videoAspect = videoWidth.toFloat() / videoHeight.toFloat()
+    val scaleX: Float
+    val scaleY: Float
+    if (videoAspect > viewAspect) {
+        scaleX = 1f
+        scaleY = viewAspect / videoAspect
+    } else {
+        scaleX = videoAspect / viewAspect
+        scaleY = 1f
+    }
+    val matrix = Matrix().apply {
+        setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
+    }
+    view.setTransform(matrix)
 }
 
 @Composable

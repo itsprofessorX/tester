@@ -328,12 +328,17 @@ class DlViewModel(private val app: Application) : AndroidViewModel(app) {
         for (attempt in 0..1) {
             try {
                 val current = tasks.firstOrNull { it.id == initial.id } ?: initial
-                if (current.directMediaUrls.isNotEmpty() && !current.format.isAudio) {
+                val isPhotoOrCarouselOrStory = current.mediaKind == MediaKind.CAROUSEL ||
+                    current.mediaKind == MediaKind.PHOTO ||
+                    Instagram.isStoryOrHighlight(current.url) ||
+                    Instagram.extractProfileUsername(current.url) != null
+
+                if (current.directMediaUrls.isNotEmpty() && !current.format.isAudio && isPhotoOrCarouselOrStory) {
                     val base = Names.clean(current.title.ifBlank { Names.fromLink(current.url) })
                     val g = try { runUrls(current.directMediaUrls.map { MediaItem(it, base) }, dir, current) } catch (_: Throwable) { 0 }
                     if (g > 0) { savedItems = g; break }
                 }
-                if (!current.format.isAudio && Instagram.isInstagram(current.url)) {
+                if (!current.format.isAudio && Instagram.isInstagram(current.url) && isPhotoOrCarouselOrStory) {
                     val g = try {
                         val rich = Instagram.resolveRich(current.url, cookies.takeIf { it.exists() })
                         if (rich != null && rich.slides.isNotEmpty()) {

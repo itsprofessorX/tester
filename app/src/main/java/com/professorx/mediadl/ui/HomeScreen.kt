@@ -342,6 +342,23 @@ fun HomeScreen(
                     Text("Paste", color = colors.textPrimary, fontSize = 13.sp)
                 }
 
+                if (vm.url.isNotBlank()) {
+                    OutlinedButton(
+                        onClick = {
+                            triggerHaptic(HapticFeedbackType.TextHandleMove)
+                            vm.url = ""
+                            vm.clearPreview()
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, colors.border),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = colors.textMuted, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Clear", color = colors.textMuted, fontSize = 13.sp)
+                    }
+                }
+
                 Button(
                     enabled = vm.ready && vm.url.isNotBlank() && !vm.isPreviewLoading,
                     onClick = {
