@@ -2,15 +2,11 @@ package com.professorx.mediadl.ui
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
-import android.graphics.SurfaceTexture
-import android.media.MediaPlayer
-import android.os.Build
-import android.view.Surface
-import android.view.TextureView
 import androidx.activity.compose.BackHandler
+import androidx.annotation.OptIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,21 +19,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pager.VerticalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.OpenInNew
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,7 +36,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -55,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -64,14 +54,19 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import com.professorx.mediadl.LocalMediaColors
 import com.professorx.mediadl.MediaKind
 import com.professorx.mediadl.SavedMedia
-import com.professorx.mediadl.formatDuration
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
+@OptIn(UnstableApi::class)
 @Composable
 fun InbuiltMediaPlayerDialog(
     items: List<SavedMedia>,
@@ -79,10 +74,40 @@ fun InbuiltMediaPlayerDialog(
     onDismiss: () -> Unit
 ) {
     if (items.isEmpty()) return
-    val pagerState = rememberPagerState(
-        initialPage = initialIndex.coerceIn(0, items.lastIndex),
-        pageCount = { items.size }
-    )
+    val ctx = LocalContext.current
+    val colors = LocalMediaColors.current
+    var currentIndex by remember { mutableIntStateOf(initialIndex.coerceIn(0, items.lastIndex)) }
+    val item = items[currentIndex]
+    val isPlayableMedia = item.kind == MediaKind.VIDEO || item.kind == MediaKind.REEL || item.kind == MediaKind.AUDIO
+    var playbackSpeed by remember { mutableFloatStateOf(1f) }
+
+    val exoPlayer = remember {
+        ExoPlayer.Builder(ctx).build().apply {
+            repeatMode = Player.REPEAT_MODE_ONE
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching { exoPlayer.release() }
+        }
+    }
+
+    LaunchedEffect(item.uriString, isPlayableMedia) {
+        if (isPlayableMedia) {
+            runCatching {
+                exoPlayer.setMediaItem(MediaItem.fromUri(item.uri))
+                exoPlayer.prepare()
+                exoPlayer.playWhenReady = true
+            }
+        } else {
+            runCatching { exoPlayer.pause() }
+        }
+    }
+
+    LaunchedEffect(playbackSpeed) {
+        runCatching { exoPlayer.setPlaybackSpeed(playbackSpeed) }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -93,19 +118,151 @@ fun InbuiltMediaPlayerDialog(
             modifier = Modifier.fillMaxSize(),
             color = Color.Black
         ) {
-            VerticalPager(
-                state = pagerState,
-                beyondViewportPageCount = 0,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                val isCurrent = pagerState.currentPage == page
-                ReelMediaPage(
-                    item = items[page],
-                    isActivePage = isCurrent,
-                    pageNumber = page + 1,
-                    totalPages = items.size,
-                    onDismiss = onDismiss
-                )
+            var dragAccumulator = 0f
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .pointerInput(items.size, currentIndex) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (dragAccumulator < -120f && currentIndex < items.lastIndex) {
+                                    currentIndex++
+                                } else if (dragAccumulator > 120f && currentIndex > 0) {
+                                    currentIndex--
+                                }
+                                dragAccumulator = 0f
+                            },
+                            onVerticalDrag = { _, dragAmount ->
+                                dragAccumulator += dragAmount
+                            }
+                        )
+                    }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Close player", tint = Color.White)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            item.name,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        val sub = if (items.size > 1) "${item.platform} · ${currentIndex + 1} / ${items.size}" else item.platform
+                        Text(sub, color = colors.textMuted, fontSize = 12.sp)
+                    }
+                    if (isPlayableMedia) {
+                        FilterPill(
+                            text = "${if (playbackSpeed == 1f) "1" else playbackSpeed}x",
+                            selected = playbackSpeed != 1f,
+                            onClick = {
+                                playbackSpeed = when (playbackSpeed) {
+                                    1f -> 1.5f
+                                    1.5f -> 2f
+                                    else -> 1f
+                                }
+                            }
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    IconButton(onClick = { shareSavedMedia(ctx, item) }) {
+                        Icon(Icons.Rounded.Share, contentDescription = "Share", tint = Color.White)
+                    }
+                    IconButton(onClick = { openSavedMedia(ctx, item) }) {
+                        Icon(Icons.Rounded.OpenInNew, contentDescription = "Open externally", tint = colors.accent)
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color(0xFF0A0A0A)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isPlayableMedia) {
+                        AndroidView(
+                            factory = { context ->
+                                PlayerView(context).apply {
+                                    player = exoPlayer
+                                    useController = true
+                                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                    setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                                }
+                            },
+                            update = { view ->
+                                if (view.player !== exoPlayer) view.player = exoPlayer
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        val bmp by produceState<Bitmap?>(initialValue = null, item.uriString) {
+                            value = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    ctx.contentResolver.openInputStream(item.uri)?.use { BitmapFactory.decodeStream(it) }
+                                }.getOrNull()
+                            }
+                        }
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp!!.asImageBitmap(),
+                                contentDescription = item.name,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Text("Unable to load image preview.", color = colors.textMuted)
+                        }
+                    }
+                }
+
+                if (items.size > 1) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            enabled = currentIndex > 0,
+                            onClick = { currentIndex-- }
+                        ) {
+                            Icon(
+                                Icons.Rounded.KeyboardArrowUp,
+                                contentDescription = "Previous",
+                                tint = if (currentIndex > 0) Color.White else colors.textMuted
+                            )
+                        }
+                        Text(
+                            "Swipe or tap arrows (${currentIndex + 1}/${items.size})",
+                            color = colors.textMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                        IconButton(
+                            enabled = currentIndex < items.lastIndex,
+                            onClick = { currentIndex++ }
+                        ) {
+                            Icon(
+                                Icons.Rounded.KeyboardArrowDown,
+                                contentDescription = "Next",
+                                tint = if (currentIndex < items.lastIndex) Color.White else colors.textMuted
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -121,391 +278,4 @@ fun InbuiltMediaPlayerDialog(
         initialIndex = 0,
         onDismiss = onDismiss
     )
-}
-
-@Composable
-private fun ReelMediaPage(
-    item: SavedMedia,
-    isActivePage: Boolean,
-    pageNumber: Int,
-    totalPages: Int,
-    onDismiss: () -> Unit
-) {
-    val ctx = LocalContext.current
-    val colors = LocalMediaColors.current
-    val isVideo = item.kind == MediaKind.VIDEO || item.kind == MediaKind.REEL
-    val isAudio = item.kind == MediaKind.AUDIO
-    var playbackSpeed by remember { mutableFloatStateOf(1f) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Rounded.Close, contentDescription = "Close player", tint = Color.White)
-            }
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    item.name,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                val sub = if (totalPages > 1) "${item.platform} · $pageNumber / $totalPages (swipe)" else item.platform
-                Text(sub, color = colors.textMuted, fontSize = 12.sp)
-            }
-            if (isVideo) {
-                FilterPill(
-                    text = "${if (playbackSpeed == 1f) "1" else playbackSpeed}x",
-                    selected = playbackSpeed != 1f,
-                    onClick = {
-                        playbackSpeed = when (playbackSpeed) {
-                            1f -> 1.5f
-                            1.5f -> 2f
-                            else -> 1f
-                        }
-                    }
-                )
-                Spacer(Modifier.width(6.dp))
-            }
-            IconButton(onClick = { shareSavedMedia(ctx, item) }) {
-                Icon(Icons.Rounded.Share, contentDescription = "Share", tint = Color.White)
-            }
-            IconButton(onClick = { openSavedMedia(ctx, item) }) {
-                Icon(Icons.Rounded.OpenInNew, contentDescription = "Open externally", tint = colors.accent)
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        when {
-            isVideo -> {
-                var mediaPlayerRef by remember(item.uriString) { mutableStateOf<MediaPlayer?>(null) }
-                var isPlaying by remember(item.uriString) { mutableStateOf(false) }
-                var durationMs by remember(item.uriString) { mutableIntStateOf(0) }
-                var positionMs by remember(item.uriString) { mutableIntStateOf(0) }
-                var loadError by remember(item.uriString) { mutableStateOf<String?>(null) }
-
-                DisposableEffect(item.uriString) {
-                    onDispose {
-                        runCatching {
-                            mediaPlayerRef?.stop()
-                            mediaPlayerRef?.release()
-                        }
-                        mediaPlayerRef = null
-                    }
-                }
-
-                LaunchedEffect(isActivePage, mediaPlayerRef) {
-                    val mp = mediaPlayerRef ?: return@LaunchedEffect
-                    runCatching {
-                        if (isActivePage) {
-                            if (!mp.isPlaying) mp.start()
-                            isPlaying = true
-                        } else if (mp.isPlaying) {
-                            mp.pause()
-                            isPlaying = false
-                        }
-                    }
-                }
-
-                LaunchedEffect(playbackSpeed, mediaPlayerRef) {
-                    val mp = mediaPlayerRef ?: return@LaunchedEffect
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        runCatching { mp.playbackParams = mp.playbackParams.setSpeed(playbackSpeed) }
-                    }
-                }
-
-                LaunchedEffect(isPlaying, mediaPlayerRef, isActivePage) {
-                    while (isActivePage) {
-                        runCatching {
-                            val mp = mediaPlayerRef
-                            if (mp != null && mp.isPlaying) {
-                                positionMs = mp.currentPosition
-                                if (durationMs <= 0 && mp.duration > 0) durationMs = mp.duration
-                            }
-                        }
-                        delay(250)
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Color(0xFF0A0A0A)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (loadError != null) {
-                        Text(loadError!!, color = colors.textMuted, fontSize = 13.sp)
-                    } else {
-                        AndroidView(
-                            factory = { context ->
-                                TextureView(context).apply {
-                                    val tv = this
-                                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                                        override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
-                                            runCatching {
-                                                val mp = MediaPlayer().apply {
-                                                    setDataSource(context, item.uri)
-                                                    setSurface(Surface(st))
-                                                    isLooping = true
-                                                    setOnVideoSizeChangedListener { _, vw, vh ->
-                                                        applyFitCenterTransform(tv, width, height, vw, vh)
-                                                    }
-                                                    setOnPreparedListener { prepared ->
-                                                        durationMs = prepared.duration.coerceAtLeast(0)
-                                                        applyFitCenterTransform(tv, width, height, prepared.videoWidth, prepared.videoHeight)
-                                                        if (isActivePage) {
-                                                            prepared.start()
-                                                            isPlaying = true
-                                                        }
-                                                    }
-                                                    setOnErrorListener { _, _, _ ->
-                                                        loadError = "Unable to play this video."
-                                                        true
-                                                    }
-                                                    prepareAsync()
-                                                }
-                                                mediaPlayerRef = mp
-                                            }.onFailure {
-                                                loadError = "Unable to open video file."
-                                            }
-                                        }
-
-                                        override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) {
-                                            mediaPlayerRef?.let { mp ->
-                                                runCatching { applyFitCenterTransform(tv, width, height, mp.videoWidth, mp.videoHeight) }
-                                            }
-                                        }
-
-                                        override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
-                                            runCatching {
-                                                mediaPlayerRef?.stop()
-                                                mediaPlayerRef?.release()
-                                            }
-                                            mediaPlayerRef = null
-                                            return true
-                                        }
-
-                                        override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                PlayerControlsBar(
-                    isPlaying = isPlaying,
-                    positionMs = positionMs,
-                    durationMs = durationMs,
-                    accent = colors.accent,
-                    onSeek = { target ->
-                        positionMs = target
-                        runCatching { mediaPlayerRef?.seekTo(target) }
-                    },
-                    onTogglePlay = {
-                        val mp = mediaPlayerRef ?: return@PlayerControlsBar
-                        runCatching {
-                            if (mp.isPlaying) {
-                                mp.pause()
-                                isPlaying = false
-                            } else {
-                                mp.start()
-                                isPlaying = true
-                            }
-                        }
-                    }
-                )
-            }
-
-            isAudio -> {
-                var isPlaying by remember { mutableStateOf(false) }
-                var durationMs by remember { mutableIntStateOf(0) }
-                var positionMs by remember { mutableIntStateOf(0) }
-                val player = remember(item.uriString) {
-                    MediaPlayer().apply {
-                        runCatching {
-                            setDataSource(ctx, item.uri)
-                            prepare()
-                            durationMs = duration.coerceAtLeast(0)
-                        }
-                    }
-                }
-
-                LaunchedEffect(isActivePage, player) {
-                    runCatching {
-                        if (isActivePage) {
-                            player.start()
-                            isPlaying = true
-                        } else if (player.isPlaying) {
-                            player.pause()
-                            isPlaying = false
-                        }
-                    }
-                }
-
-                DisposableEffect(player) {
-                    onDispose {
-                        runCatching {
-                            if (player.isPlaying) player.stop()
-                            player.release()
-                        }
-                    }
-                }
-
-                LaunchedEffect(player, isActivePage) {
-                    while (isActivePage) {
-                        runCatching {
-                            if (player.isPlaying) positionMs = player.currentPosition
-                            isPlaying = player.isPlaying
-                        }
-                        delay(250)
-                    }
-                }
-
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(140.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF141414)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.AudioFile, contentDescription = null, tint = colors.accent, modifier = Modifier.size(64.dp))
-                    }
-                }
-
-                PlayerControlsBar(
-                    isPlaying = isPlaying,
-                    positionMs = positionMs,
-                    durationMs = durationMs,
-                    accent = colors.accent,
-                    onSeek = { target ->
-                        positionMs = target
-                        runCatching { player.seekTo(target) }
-                    },
-                    onTogglePlay = {
-                        runCatching {
-                            if (player.isPlaying) {
-                                player.pause()
-                                isPlaying = false
-                            } else {
-                                player.start()
-                                isPlaying = true
-                            }
-                        }
-                    }
-                )
-            }
-
-            else -> {
-                val bmp by produceState<Bitmap?>(initialValue = null, item.uriString) {
-                    value = withContext(Dispatchers.IO) {
-                        runCatching {
-                            ctx.contentResolver.openInputStream(item.uri)?.use { BitmapFactory.decodeStream(it) }
-                        }.getOrNull()
-                    }
-                }
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (bmp != null) {
-                        Image(
-                            bitmap = bmp!!.asImageBitmap(),
-                            contentDescription = item.name,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
-                        )
-                    } else {
-                        Text("Unable to load image preview.", color = colors.textMuted)
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun applyFitCenterTransform(view: TextureView, viewWidth: Int, viewHeight: Int, videoWidth: Int, videoHeight: Int) {
-    if (viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return
-    val viewAspect = viewWidth.toFloat() / viewHeight.toFloat()
-    val videoAspect = videoWidth.toFloat() / videoHeight.toFloat()
-    val scaleX: Float
-    val scaleY: Float
-    if (videoAspect > viewAspect) {
-        scaleX = 1f
-        scaleY = viewAspect / videoAspect
-    } else {
-        scaleX = videoAspect / viewAspect
-        scaleY = 1f
-    }
-    val matrix = Matrix().apply {
-        setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
-    }
-    view.setTransform(matrix)
-}
-
-@Composable
-private fun PlayerControlsBar(
-    isPlaying: Boolean,
-    positionMs: Int,
-    durationMs: Int,
-    accent: Color,
-    onSeek: (Int) -> Unit,
-    onTogglePlay: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF141414))
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        val maxVal = durationMs.coerceAtLeast(1).toFloat()
-        Slider(
-            value = positionMs.coerceIn(0, durationMs.coerceAtLeast(1)).toFloat(),
-            onValueChange = { onSeek(it.toInt()) },
-            valueRange = 0f..maxVal,
-            colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(formatDuration((positionMs / 1000L)), color = Color.White, fontSize = 12.sp)
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(accent)
-                    .elasticClickable(onClick = onTogglePlay),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = Color.White
-                )
-            }
-            Text(formatDuration((durationMs / 1000L)), color = Color(0xFF8E8E93), fontSize = 12.sp)
-        }
-    }
 }
